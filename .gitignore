@@ -1,0 +1,12 @@
+.env
+**/.terraform
+**/terraform.tfstate*
+**/terraform.tfvars
+**/.terraform.tfstate.lock.info
+**/.terraform.lock.hcl
+**/.test.lock
+.idea
+.vscode
+credentials.json
+key.json
+.DS_Store
