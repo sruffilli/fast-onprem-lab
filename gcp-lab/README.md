@@ -196,7 +196,7 @@ conn gcp2
 
 `/etc/strongswan.d/vti.conf`
 
-```json
+```hcl
 charon {
   install_routes = no
 }
