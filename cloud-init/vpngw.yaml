@@ -241,14 +241,24 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-  # CoreDNS systemd unit
+  # CoreDNS config
   - path: /etc/coredns/Corefile
     owner: root:root
     permissions: "0640"
     content: |
-      onprem.example.com {
-        whoami
-        log {
-          class denial error
-        }
+      . {
+          hosts /etc/coredns/onprem-hosts onprem.example.com {
+              127.0.0.1   localhost.onprem.example.com localhost
+          }
+          forward . /etc/resolv.conf
+          reload
+          log
+          errors
       }
+
+  # CoreDNS sample hosts file
+  - path: /etc/coredns/onprem-hosts
+    owner: root:root
+    permissions: "0640"
+    content: |
+      127.0.0.10 ten
