@@ -20,4 +20,5 @@ module "hetzner" {
   hetzner_token       = var.hetzner_token
   ssh_key             = var.ssh_key
   vpn_config          = var.vpn_config
+  net_cidr            = var.onprem_cidr
 }
