@@ -1,37 +1,23 @@
-locals {
-  cloud_config = {
-    fal = templatefile("cloud-init/vpngw-fal.yaml", var.vpn_config.fal)
-  }
-}
+/**
+ * Copyright 2022 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-resource "hcloud_ssh_key" "default" {
-  name       = "hetzner_key"
-  public_key = file(var.ssh_key)
-}
-
-resource "hcloud_server" "fal" {
-  name        = "vpngw"
-  image       = "debian-11"
-  server_type = "cpx11"
-  location    = "fsn1"
-  ssh_keys    = [hcloud_ssh_key.default.id]
-  user_data   = local.cloud_config.fal
-}
-
-resource "hcloud_server_network" "fal_network" {
-  server_id = hcloud_server.fal.id
-  subnet_id = hcloud_network_subnet.fal.id
-}
-
-resource "hcloud_network" "fal" {
-  name     = "net-fal"
-  ip_range = "10.0.64.0/24"
-}
-
-
-resource "hcloud_network_subnet" "fal" {
-  network_id   = hcloud_network.fal.id
-  type         = "cloud"
-  network_zone = "eu-central"
-  ip_range     = "10.0.64.0/24"
+module "hetzner" {
+  source              = "./modules/hetzner-lab"
+  cloud_init_template = "./cloud-init/vpngw.yaml"
+  hetzner_token       = var.hetzner_token
+  ssh_key             = var.ssh_key
+  vpn_config          = var.vpn_config
 }
