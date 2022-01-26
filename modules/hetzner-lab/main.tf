@@ -25,7 +25,7 @@ resource "hcloud_server_network" "vpngw_network" {
 
 resource "hcloud_network" "vpngw" {
   name     = "net-vpngw"
-  ip_range = var.onprem_cidr
+  ip_range = var.net_cidr
 }
 
 
@@ -33,5 +33,5 @@ resource "hcloud_network_subnet" "vpngw" {
   network_id   = hcloud_network.vpngw.id
   type         = "cloud"
   network_zone = "eu-central"
-  ip_range     = var.onprem_cidr
+  ip_range     = var.net_cidr
 }
