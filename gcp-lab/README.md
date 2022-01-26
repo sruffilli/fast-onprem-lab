@@ -1,22 +1,12 @@
+# Setting up a simulated on-prem environment for GCP
 
-This guide walks you through how to configure [strongSwan](https://www.strongswan.org/),
-[frr](https://frrouting.org/) and [CoreDNS](https://coredns.io/) to simulate an
-on premises environment, to be integrated with a Google Cloud environment
-leveraging 
-[Google Cloud VPN HA](https://cloud.google.com/network-connectivity/docs/vpn) and [Google Cloud DNS](https://cloud.google.com/dns/docs/overview/). This 
-information is provided as an example only and is not meant to be a 
+This guide walks you through how to configure
+[strongSwan](https://www.strongswan.org/), [frr](https://frrouting.org/) and
+[CoreDNS](https://coredns.io/) to simulate an on premises environment, to be integrated with a Google Cloud environment leveraging
+[Google Cloud VPN HA](https://cloud.google.com/network-connectivity/docs/vpn) and [Google Cloud DNS](https://cloud.google.com/dns/docs/overview/). This
+information is provided as an example only and is not meant to be a
 comprehensive overview of IPsec, BGP and DNS. Basic knowledge of the involved
 protocols is required.
-
-# Environment overview
-
-The equipment used in the creation of this guide is as follows:
-
-* VM or physical server hosted outside the Google Cloud Platform
-* Operating system: Debian 11
-* StrongSwan, software release: 5.9.1
-* FRR, software release: 7.5.1
-* CoreDNS, software release: 1.8.7
 
 ## Topology
 
@@ -25,9 +15,22 @@ configuration per the diagram below:
 
 ![Topology](diagram.svg)
 
-# Before you begin
+## GCP environment
 
-## Prerequisites
+This guide assumes you have an empty GCP project with billing enabled.
+
+The following values are also assumed for your GCP environment:
+
+|Name|Value|Description|
+|-|-|-|
+|Cloud VPN Gateway INTERFACE0 |`35.242.88.135`|IP for the VPN Gateway INTERFACE0, generated when creating the VPN Gateway|
+|Cloud VPN Gateway INTERFACE1 |`35.220.106.20`|IP for the VPN Gateway INTERFACE1, generated when creating the VPN Gateway|
+|Project id|`vpn-lab-foobar`|Project ID for the existing GCP project where the environment will be set up|
+|Region|`europe-west1`|Deployment region for the GCP environment|
+|VPC|`vpc`|Name for the GCP VPC|
+|VPC CIDR|`10.0.1.0/24`|GCP network CIDR|
+
+## On premises environment
 
 Although the configurations and steps described in the following sections should apply to a wide range of Linux distributions, this guide assumes the following setup:
 
@@ -40,49 +43,51 @@ Although the configurations and steps described in the following sections should
   * UDP 4500
   * ESP proto
 
+The following values are also assumed for your on premises environment:
 
-Below is a sample environment to walk you through the setup of IPSec on the on premises server. Make sure to replace the IP addresses in the sample environment with your own IP addresses.
-
-**GCP Environment**
-
-|Name | Value|
------|------
-|Cloud VPN Gateway Interface 0 |`35.242.88.135`|
-|Cloud VPN Gateway Interface 0 |`35.220.106.20`|
-|Project name|`vpn-lab-000`|
-|Region|`europe-west1`|
-|VPC|`vpc`|
-|VPC CIDR|`10.0.1.0/24`|
-
-
-
-**On premises server**
-
-|Name | Value|
------|------
-|External IP|`8.8.8.8`|
-|Internal IP|`10.0.0.1`|
-|On premises CIDR|`10.0.0.0/24`|
+|Name|Value|Description|
+|-|-|-|
+|External IP|`78.46.123.183`|External IP address|
+|Internal IP|`10.0.64.2/24`|Internal IP address|
+|On premises CIDR|`10.0.64.0/24`|Onprem network CIDR|
 
 ## GCP VPN HA
 
-To configure Cloud VPN:
+To configure the Cloud Environment
 
 ```bash
-gcloud config set project vpn-lab-000
 
+# Use the existing vpn-lab-foobar project for all following commands
+gcloud config set project vpn-lab-foobar
+
+# Create a VPC named "vpc"
+# Enable `compute.googleapis.com` if prompted to do so.
+gcloud compute networks create vpc --bgp-routing-mode=global \
+--subnet-mode=custom
+
+# Create a firewall rule enabling ICMP for the VPC
+gcloud compute firewall-rules create allow-icmp --network vpc --allow icmp
+
+# Create a subnet 
+gcloud compute networks subnets create ew1-subnet --network=vpc \ 
+--range=10.0.1.0/24 --region=europe-west1
+
+# Create the VPN gateway which will terminate the ipsec tunnels
 gcloud compute vpn-gateways create gcp-to-onprem \
   --network=vpc \
   --region=europe-west1
 
+# Create the external vpn gateway object
 gcloud compute external-vpn-gateways create onprem-vpn-gateway \
-  --interfaces 0=8.8.8.8
+  --interfaces 0=78.46.123.183
 
+# Create a Cloud Router to terminate the BGP sessions
 gcloud compute routers create vpn-router \
   --region=europe-west1 \
   --network=vpc \
   --asn=64512
 
+# Create the VPN tunnels (tunnel-0)
 gcloud compute vpn-tunnels create tunnel-0 \
   --peer-external-gateway=onprem-vpn-gateway \
   --peer-external-gateway-interface=0  \
@@ -93,6 +98,7 @@ gcloud compute vpn-tunnels create tunnel-0 \
   --vpn-gateway=gcp-to-onprem \
   --interface=0
 
+# Create the VPN tunnels (tunnel-1)
 gcloud compute vpn-tunnels create tunnel-1 \
   --peer-external-gateway=onprem-vpn-gateway \
   --peer-external-gateway-interface=0 \
@@ -103,10 +109,12 @@ gcloud compute vpn-tunnels create tunnel-1 \
   --vpn-gateway=gcp-to-onprem \
   --interface=1
 
+# Create the interface for the Cloud Router (0)
 gcloud compute routers add-interface vpn-router \
   --interface-name=vpn-if-0 --vpn-tunnel=tunnel-0 \
   --ip-address=169.254.1.2 --mask-length=30 --region=europe-west1
 
+# Create the BGP peer object for the Cloud Router interface (0)
 gcloud compute routers add-bgp-peer vpn-router \
   --peer-name=bgp-tunnel-0 \
   --peer-asn=65534 \
@@ -114,10 +122,12 @@ gcloud compute routers add-bgp-peer vpn-router \
   --peer-ip-address=169.254.1.1 \
   --region=europe-west1
 
+# Create the interface for the Cloud Router (1)
 gcloud compute routers add-interface vpn-router \
   --interface-name=vpn-if-1 --vpn-tunnel=tunnel-1 \
   --ip-address=169.254.1.6 --mask-length=30 --region=europe-west1
 
+# Create the BGP peer object for the Cloud Router interface (1)
 gcloud compute routers add-bgp-peer vpn-router \
   --peer-name=bgp-tunnel-1 \
   --peer-asn=65534 \
@@ -126,7 +136,6 @@ gcloud compute routers add-bgp-peer vpn-router \
   --region=europe-west1
 
 ```
-
 
 ## Configuration of on-premises environment
 
@@ -140,7 +149,7 @@ rm /var/www/html/* && echo "Greetings from $(curl -s ifconfig.me)!" >>/var/www/h
 curl -s -L https://github.com/coredns/coredns/releases/download/v1.8.7/coredns_1.8.7_linux_amd64.tgz | tar xz -C /usr/bin
 ```
 
-create or replace the following files (and any required directory), making 
+create or replace the following files (and any required directory), making
 sure to adapt any IP address with values from your actual infrastructure.
 
 `/etc/ipsec.secrets`
@@ -368,4 +377,3 @@ service coredns restart
 service strongswan-starter restart
 service frr restart
 ```
-
