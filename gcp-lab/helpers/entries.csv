@@ -1,0 +1,2 @@
+group_name,vpn_if_0,vpn_if_1,router_range_0,router_range_1,asn
+simo, 35.242.81.74, 35.220.98.66, 169.254.1.0/30, 169.254.1.4/30, 64512

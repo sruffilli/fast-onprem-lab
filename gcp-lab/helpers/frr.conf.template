@@ -1,0 +1,22 @@
+frr defaults traditional
+hostname vpngw
+log syslog informational
+no ipv6 forwarding
+service integrated-vtysh-config
+!
+router bgp 65534
+$neighbor$
+!
+address-family ipv4 unicast
+  redistribute connected
+$route-map$
+exit-address-family
+!
+route-map gcp permit 10
+!
+route-map import permit 1
+!
+route-map export permit 1
+!
+line vty
+!

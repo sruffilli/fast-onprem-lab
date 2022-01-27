@@ -1,0 +1,22 @@
+conn %default
+  ikelifetime=600m
+  keylife=180m
+  rekeymargin=3m
+  keyingtries=3
+  keyexchange=ikev2
+  mobike=no
+  ike=aes256gcm16-sha512-modp2048
+  esp=aes256gcm16-sha512-modp8192
+  authby=psk
+  left=%any
+  leftid=%any
+  leftsubnet=0.0.0.0/0
+  leftauth=psk
+  rightsubnet=0.0.0.0/0
+  rightauth=psk
+  type=tunnel
+  auto=start
+  dpdaction=restart
+  closeaction=restart
+  mark=%unique
+
