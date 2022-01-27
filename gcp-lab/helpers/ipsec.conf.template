@@ -8,15 +8,4 @@ conn %default
   ike=aes256gcm16-sha512-modp2048
   esp=aes256gcm16-sha512-modp8192
   authby=psk
-  left=%any
-  leftid=%any
-  leftsubnet=0.0.0.0/0
-  leftauth=psk
-  rightsubnet=0.0.0.0/0
-  rightauth=psk
-  type=tunnel
-  auto=start
-  dpdaction=restart
-  closeaction=restart
-  mark=%unique
 

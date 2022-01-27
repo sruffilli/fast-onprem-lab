@@ -31,8 +31,7 @@ write_files:
     owner: root:root
     permissions: "0600"
     content: |
-      ${peer1.peer_ip} : PSK "${peer1.shared_secret}"
-      ${peer2.peer_ip} : PSK "${peer2.shared_secret}"
+      ${" "}: PSK "${peer1.shared_secret}"
 
   # IPSEC tunnel configuration
   - path: /etc/ipsec.conf
@@ -184,10 +183,6 @@ write_files:
       exit-address-family
       !
       route-map gcp permit 10
-      !
-      route-map import permit 1
-      !
-      route-map export permit 1
       !
       line vty
       !

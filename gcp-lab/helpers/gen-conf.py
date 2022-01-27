@@ -7,16 +7,39 @@ import os
 MARK_IPSEC = "# IPSec Connections"
 
 
-def get_ipsec_conn(r):
+def get_ipsec_conn(r, id):
   conn = (
-      f'conn {r["group_name"]}-0',
-      f'  leftupdown="/var/lib/strongswan/ipsec-vti.sh 0 {str(ipaddress.IPv4Network(r["router_range_0"])[2])} {str(ipaddress.IPv4Network(r["router_range_0"])[1])}"',
+      f'conn {r["group_name"]}0',
+      f'  leftupdown="/var/lib/strongswan/ipsec-vti.sh {id} {str(ipaddress.IPv4Network(r["router_range_0"])[2])}/30 {str(ipaddress.IPv4Network(r["router_range_0"])[1])}/30"',
+      f'  left=%any',
+      f'  leftid=%any',
+      f'  leftsubnet=0.0.0.0/0',
+      f'  leftauth=psk',
       f'  right={r["vpn_if_0"]}',
       f'  rightid={r["vpn_if_0"]}',
-      f'conn {r["group_name"]}-1',
-      f'  leftupdown="/var/lib/strongswan/ipsec-vti.sh 1 {str(ipaddress.IPv4Network(r["router_range_1"])[2])} {str(ipaddress.IPv4Network(r["router_range_1"])[1])}"',
+      f'  rightsubnet=0.0.0.0/0',
+      f'  rightauth=psk',
+      f'  type=tunnel',
+      f'  auto=start',
+      f'  dpdaction=restart',
+      f'  closeaction=restart',
+      f'  mark=%unique',
+      f'conn {r["group_name"]}1',
+      f'  leftupdown="/var/lib/strongswan/ipsec-vti.sh {id+1} {str(ipaddress.IPv4Network(r["router_range_1"])[2])}/30 {str(ipaddress.IPv4Network(r["router_range_1"])[1])}/30"',
+      f'  left=%any',
+      f'  leftid=%any',
+      f'  leftsubnet=0.0.0.0/0',
+      f'  leftauth=psk',
       f'  right={r["vpn_if_1"]}',
-      f'  rightid={r["vpn_if_1"]}'
+      f'  rightid={r["vpn_if_1"]}',
+      f'  rightsubnet=0.0.0.0/0',
+      f'  rightauth=psk',
+      f'  type=tunnel',
+      f'  auto=start',
+      f'  dpdaction=restart',
+      f'  closeaction=restart',
+      f'  mark=%unique',
+      '',
   )
   return "\n".join(conn)
 
@@ -40,9 +63,12 @@ except (IOError, OSError) as e:
 neighbor_entries = []
 route_map_entries = []
 
+id = 0
+
 for r in reader:
   r = {k: v.strip() for k, v in r.items()}
-  ipsec_conf_content = ipsec_conf_content + get_ipsec_conn(r)
+  ipsec_conf_content = ipsec_conf_content + get_ipsec_conn(r, id)
+  id = id + 1
 
   neighbor_entries.append(
       f'neighbor {str(ipaddress.IPv4Network(r["router_range_0"])[2])} remote-as {r["asn"]}')

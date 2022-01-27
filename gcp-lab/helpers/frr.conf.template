@@ -14,9 +14,5 @@ exit-address-family
 !
 route-map gcp permit 10
 !
-route-map import permit 1
-!
-route-map export permit 1
-!
 line vty
 !
