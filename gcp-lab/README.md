@@ -23,8 +23,8 @@ The following values are also assumed for your GCP environment:
 
 |Name|Value|Description|
 |-|-|-|
-|Cloud VPN Gateway INTERFACE0 |`35.242.88.135`|IP for the VPN Gateway INTERFACE0, generated when creating the VPN Gateway|
-|Cloud VPN Gateway INTERFACE1 |`35.220.106.20`|IP for the VPN Gateway INTERFACE1, generated when creating the VPN Gateway|
+|Cloud VPN Gateway INTERFACE0 |`35.242.91.63`|IP for the VPN Gateway INTERFACE0, generated when creating the VPN Gateway|
+|Cloud VPN Gateway INTERFACE1 |`35.220.112.158`|IP for the VPN Gateway INTERFACE1, generated when creating the VPN Gateway|
 |Project id|`vpn-lab-foobar`|Project ID for the existing GCP project where the environment will be set up|
 |Region|`europe-west1`|Deployment region for the GCP environment|
 |VPC|`vpc`|Name for the GCP VPC|
@@ -53,23 +53,23 @@ The following values are also assumed for your on premises environment:
 
 ## GCP VPN HA
 
-To configure the Cloud Environment
+Run the following commands to create the GCP environments
 
 ```bash
 
 # Use the existing vpn-lab-foobar project for all following commands
-gcloud config set project vpn-lab-foobar
+gcloud config set project vpn-lab-foobar-0
 
 # Create a VPC named "vpc"
 # Enable `compute.googleapis.com` if prompted to do so.
 gcloud compute networks create vpc --bgp-routing-mode=global \
 --subnet-mode=custom
 
-# Create a firewall rule enabling ICMP for the VPC
-gcloud compute firewall-rules create allow-icmp --network vpc --allow icmp
+# Create a firewall rule enabling ICMP and SSH for the VPC
+gcloud compute firewall-rules create allow-icmp-ssh --network vpc --allow tcp:22,icmp
 
 # Create a subnet 
-gcloud compute networks subnets create ew1-subnet --network=vpc \ 
+gcloud compute networks subnets create ew1-subnet --network=vpc \
 --range=10.0.1.0/24 --region=europe-west1
 
 # Create the VPN gateway which will terminate the ipsec tunnels
@@ -79,13 +79,20 @@ gcloud compute vpn-gateways create gcp-to-onprem \
 
 # Create the external vpn gateway object
 gcloud compute external-vpn-gateways create onprem-vpn-gateway \
-  --interfaces 0=78.46.123.183
+  --interfaces 0=65.21.56.162
 
 # Create a Cloud Router to terminate the BGP sessions
 gcloud compute routers create vpn-router \
   --region=europe-west1 \
   --network=vpc \
   --asn=64512
+
+# Announce Cloud DNS ranges
+gcloud compute routers update vpn-router \
+   --advertisement-mode custom \
+   --region=europe-west1 \
+   --set-advertisement-groups all_subnets \
+   --set-advertisement-ranges 35.199.192.0/19 
 
 # Create the VPN tunnels (tunnel-0)
 gcloud compute vpn-tunnels create tunnel-0 \
@@ -135,7 +142,44 @@ gcloud compute routers add-bgp-peer vpn-router \
   --peer-ip-address=169.254.1.5 \
   --region=europe-west1
 
+# Create a private zone for the GCP environment
+gcloud dns managed-zones create gcp-example-org \
+    --dns-name=gcp.example.com. \
+    --networks=vpc \
+    --description="Example private zone" \
+    --visibility=private
+
+# Create a forwarding zone to resolve onprem addresses
+gcloud dns managed-zones create onprem-example-org \
+    --description="Example forwarding zone" \
+    --dns-name=onprem.example.com. \
+    --networks=vpc \
+    --private-forwarding-targets=10.0.0.2 \
+    --visibility=private
+
+# Create a test VM
+gcloud compute instances create instance-1 --zone=europe-west1-b --machine-type=f1-micro --subnet=ew1-subnet --create-disk=image=projects/debian-cloud/global/images/debian-10-buster-v20220118,mode=rw,size=10,type=projects/vpn-lab-foobar-0/zones/europe-west1-b/diskTypes/pd-balanced 
 ```
+
+
+
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
+
+
+
 
 ## Configuration of on-premises environment
 
@@ -143,7 +187,7 @@ To install the required packages use the following commands as root (or prefix c
 
 ```bash
 apt update
-apt install nginx strongswan libstrongswan-standard-plugins frr
+apt install nginx strongswan libstrongswan-standard-plugins frr -y
 
 rm /var/www/html/* && echo "Greetings from $(curl -s ifconfig.me)!" >>/var/www/html/index.html
 curl -s -L https://github.com/coredns/coredns/releases/download/v1.8.7/coredns_1.8.7_linux_amd64.tgz | tar xz -C /usr/bin
@@ -152,16 +196,14 @@ curl -s -L https://github.com/coredns/coredns/releases/download/v1.8.7/coredns_1
 create or replace the following files (and any required directory), making
 sure to adapt any IP address with values from your actual infrastructure.
 
-`/etc/ipsec.secrets`
-
-```conf
-35.242.88.135 : PSK "changeme-ike-secret"
-35.220.106.20 : PSK "changeme-ike-secret"
+```bash
+cat <<'EOF' >/etc/ipsec.secrets
+ : PSK "changeme-ike-secret"
+EOF
 ```
 
-`/etc/ipsec.conf`
-
-```conf
+```bash
+cat <<'EOF' >/etc/ipsec.conf
 conn %default
   ikelifetime=600m
   keylife=180m
@@ -185,26 +227,26 @@ conn %default
   mark=%unique
 conn gcp
   leftupdown="/var/lib/strongswan/ipsec-vti.sh 0 169.254.1.2/30 169.254.1.1/30"
-  right=35.242.88.135
-  rightid=35.242.88.135
+  right=35.242.91.63
+  rightid=35.242.91.63
 conn gcp2
   leftupdown="/var/lib/strongswan/ipsec-vti.sh 1 169.254.1.6/30 169.254.1.5/30"
   left=%any
-  right=35.220.106.20
-  rightid=35.220.106.20
+  right=35.220.112.158
+  rightid=35.220.112.158
+EOF
 ```
 
-`/etc/strongswan.d/vti.conf`
-
-```hcl
+```bash
+cat <<'EOF' >/etc/strongswan.d/vti.conf
 charon {
   install_routes = no
 }
+EOF
 ```
 
-`/var/lib/strongswan/ipsec-vti.sh`
-
 ```bash
+cat <<'EOF' >/var/lib/strongswan/ipsec-vti.sh
 #!/bin/bash
 # Copyright 2022 Google LLC
 #
@@ -270,11 +312,11 @@ sudo /sbin/sysctl -w net.ipv4.ip_forward=1
 # Disable IPSEC Encryption on local net
 sudo /sbin/sysctl -w net.ipv4.conf.${LOCAL_IF}.disable_xfrm=1
 sudo /sbin/sysctl -w net.ipv4.conf.${LOCAL_IF}.disable_policy=1
+EOF
 ```
 
-`/etc/frr/frr.conf`
-
-```frr
+```bash
+cat <<'EOF' >/etc/frr/frr.conf
 frr defaults traditional
 hostname vpngw
 log syslog informational
@@ -301,11 +343,11 @@ route-map export permit 1
 !
 line vty
 !
+EOF
 ```
 
-`/etc/frr/daemons`
-
-```conf
+```bash
+cat <<'EOF' >/etc/frr/daemons
 bgpd=yes
 ospfd=no
 ospf6d=no
@@ -325,11 +367,11 @@ vrrpd=no
 vtysh_enable=yes
 zebra_options="  -A 127.0.0.1 -s 90000000"
 bgpd_options="   -A 127.0.0.1"
+EOF
 ```
 
-`/lib/systemd/system/coredns.service`
-
-```ini
+```bash
+cat <<'EOF' >/lib/systemd/system/coredns.service
 [Unit]
 Description=CoreDNS DNS server
 Documentation=https://coredns.io
@@ -348,11 +390,12 @@ ExecReload=/bin/kill -SIGUSR1 $MAINPID
 Restart=on-failure
 [Install]
 WantedBy=multi-user.target
+EOF
 ```
 
-`/etc/coredns/Corefile`
-
-```coredns
+```bash
+mkdir /etc/coredns
+cat <<'EOF' >/etc/coredns/Corefile
 . {
     hosts /etc/coredns/onprem-hosts onprem.example.com {
         127.0.0.1   localhost.onprem.example.com localhost
@@ -362,12 +405,13 @@ WantedBy=multi-user.target
     log
     errors
 }
+EOF
 ```
 
-`/etc/coredns/onprem-hosts`
-
-```conf
+```bash
+cat <<'EOF' >/etc/coredns/onprem-hosts
 127.0.0.10 ten
+EOF
 ```
 
 ```bash
