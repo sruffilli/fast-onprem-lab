@@ -21,11 +21,11 @@ This guide assumes you have an empty GCP project with billing enabled.
 
 The following values are also assumed for your GCP environment:
 
+|Name|Value|Description|
 |-|-|-|
 |Cloud Private DNS Zone|`gcp.example.com`|On premises Private DNS Zone|
 |Cloud VPN Gateway INTERFACE0 |`35.242.88.135`|IP for the VPN Gateway INTERFACE0, generated when creating the VPN Gateway|
 |Cloud VPN Gateway INTERFACE1 |`35.220.106.20`|IP for the VPN Gateway INTERFACE1, generated when creating the VPN Gateway|
-|Name|Value|Description|
 |Project id|`vpn-lab-foobar`|Project ID for the existing GCP project where the environment will be set up|
 |Region|`europe-west1`|Deployment region for the GCP environment|
 |VPC CIDR|`10.0.1.0/24`|GCP network CIDR|
