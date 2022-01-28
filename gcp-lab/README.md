@@ -173,7 +173,7 @@ gcloud compute instances create instance-1 --zone=europe-west1-b --machine-type=
 
 ```
 
-## Configuration of on-premises environment
+## Configuration of the on-premises environment
 
 The commands that follow install the required packages and binary files, create
 the required configuration files and start StrongSwan, FRR, CoreDNS and Nginx.
