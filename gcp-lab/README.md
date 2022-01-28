@@ -13,7 +13,7 @@ protocols is required.
 The topology outlined by this guide is a site-to-site IPsec VPN HA tunnel
 configuration per the diagram below:
 
-![Topology](diagram.svg)
+![Topology](./diagram.svg)
 
 ## GCP environment
 
