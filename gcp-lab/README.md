@@ -21,14 +21,15 @@ This guide assumes you have an empty GCP project with billing enabled.
 
 The following values are also assumed for your GCP environment:
 
-|Name|Value|Description|
 |-|-|-|
-|Cloud VPN Gateway INTERFACE0 |`35.242.91.63`|IP for the VPN Gateway INTERFACE0, generated when creating the VPN Gateway|
-|Cloud VPN Gateway INTERFACE1 |`35.220.112.158`|IP for the VPN Gateway INTERFACE1, generated when creating the VPN Gateway|
+|Cloud Private DNS Zone|`gcp.example.com`|On premises Private DNS Zone|
+|Cloud VPN Gateway INTERFACE0 |`35.242.88.135`|IP for the VPN Gateway INTERFACE0, generated when creating the VPN Gateway|
+|Cloud VPN Gateway INTERFACE1 |`35.220.106.20`|IP for the VPN Gateway INTERFACE1, generated when creating the VPN Gateway|
+|Name|Value|Description|
 |Project id|`vpn-lab-foobar`|Project ID for the existing GCP project where the environment will be set up|
 |Region|`europe-west1`|Deployment region for the GCP environment|
-|VPC|`vpc`|Name for the GCP VPC|
 |VPC CIDR|`10.0.1.0/24`|GCP network CIDR|
+|VPC|`vpc`|Name for the GCP VPC|
 
 ## On premises environment
 
@@ -47,9 +48,10 @@ The following values are also assumed for your on premises environment:
 
 |Name|Value|Description|
 |-|-|-|
-|External IP|`78.46.123.183`|External IP address|
-|Internal IP|`10.0.64.2/24`|Internal IP address|
-|On premises CIDR|`10.0.64.0/24`|Onprem network CIDR|
+|External IP|`198.51.100.1`|External IP address|
+|Internal IP|`10.0.0.2/24`|Internal IP address|
+|On premises CIDR|`10.0.0.0/24`|Onprem network CIDR|
+|On premises Private DNS Zone|`onprem.example.com`|On premises Private DNS Zone|
 
 ## GCP VPN HA
 
@@ -79,7 +81,7 @@ gcloud compute vpn-gateways create gcp-to-onprem \
 
 # Create the external vpn gateway object
 gcloud compute external-vpn-gateways create onprem-vpn-gateway \
-  --interfaces 0=65.21.56.162
+  --interfaces 0=198.51.100.1
 
 # Create a Cloud Router to terminate the BGP sessions
 gcloud compute routers create vpn-router \
@@ -143,47 +145,38 @@ gcloud compute routers add-bgp-peer vpn-router \
   --region=europe-west1
 
 # Create a private zone for the GCP environment
-gcloud dns managed-zones create gcp-example-org \
+gcloud dns managed-zones create gcp-example-com \
     --dns-name=gcp.example.com. \
     --networks=vpc \
     --description="Example private zone" \
     --visibility=private
 
 # Create a forwarding zone to resolve onprem addresses
-gcloud dns managed-zones create onprem-example-org \
+gcloud dns managed-zones create onprem-example-com \
     --description="Example forwarding zone" \
     --dns-name=onprem.example.com. \
     --networks=vpc \
     --private-forwarding-targets=10.0.0.2 \
     --visibility=private
 
+# Create an inbound policy to resolve DNS queries from onprem
+gcloud dns policies create inbound-policy \
+    --description="Inbound policy" \
+    --networks=vpc \
+    --enable-inbound-forwarding
+
 # Create a test VM
-gcloud compute instances create instance-1 --zone=europe-west1-b --machine-type=f1-micro --subnet=ew1-subnet --create-disk=image=projects/debian-cloud/global/images/debian-10-buster-v20220118,mode=rw,size=10,type=projects/vpn-lab-foobar-0/zones/europe-west1-b/diskTypes/pd-balanced 
+gcloud compute instances create instance-1 --zone=europe-west1-b --machine-type=f1-micro --subnet=ew1-subnet --create-disk=image=projects/debian-cloud/global/images/debian-10-buster-v20220118,mode=rw,size=10,type=projects/vpn-lab-foobar-0/zones/europe-west1-b/diskTypes/pd-balanced \
+--metadata=startup-script='#! /bin/bash
+  apt update
+  apt -y install apache2 iproute2 iputils-ping dnsutils'
+
 ```
-
-
-
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-TODO ROTTE DI HOPE TODO ROTTE DI HOPE 
-
-
-
 
 ## Configuration of on-premises environment
 
-To install the required packages use the following commands as root (or prefix commands with sudo)
+The commands that follow install the required packages and binary files, create
+the required configuration files and start StrongSwan, FRR, CoreDNS and Nginx.
 
 ```bash
 apt update
@@ -192,9 +185,6 @@ apt install nginx strongswan libstrongswan-standard-plugins frr -y
 rm /var/www/html/* && echo "Greetings from $(curl -s ifconfig.me)!" >>/var/www/html/index.html
 curl -s -L https://github.com/coredns/coredns/releases/download/v1.8.7/coredns_1.8.7_linux_amd64.tgz | tar xz -C /usr/bin
 ```
-
-create or replace the following files (and any required directory), making
-sure to adapt any IP address with values from your actual infrastructure.
 
 ```bash
 cat <<'EOF' >/etc/ipsec.secrets
@@ -227,13 +217,13 @@ conn %default
   mark=%unique
 conn gcp
   leftupdown="/var/lib/strongswan/ipsec-vti.sh 0 169.254.1.2/30 169.254.1.1/30"
-  right=35.242.91.63
-  rightid=35.242.91.63
+  right=35.242.88.135
+  rightid=35.242.88.135
 conn gcp2
   leftupdown="/var/lib/strongswan/ipsec-vti.sh 1 169.254.1.6/30 169.254.1.5/30"
   left=%any
-  right=35.220.112.158
-  rightid=35.220.112.158
+  right=35.220.106.20
+  rightid=35.220.106.20
 EOF
 ```
 
@@ -400,7 +390,6 @@ cat <<'EOF' >/etc/coredns/Corefile
     hosts /etc/coredns/onprem-hosts onprem.example.com {
         127.0.0.1   localhost.onprem.example.com localhost
     }
-    forward . /etc/resolv.conf
     reload
     log
     errors
