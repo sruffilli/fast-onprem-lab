@@ -15,6 +15,12 @@ packages:
   - frr
 
 runcmd:
+  - ufw allow from 10.0.0.0/8
+  - ufw allow from 172.16.0.0/12
+  - ufw allow from 192.168.0.0/16
+  - ufw allow ssh
+  - ufw default deny incoming
+  - ufw --force enable
   - sed -ie '/^PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
   - service ssh restart
   - rm /var/www/html/*
@@ -31,7 +37,7 @@ write_files:
     owner: root:root
     permissions: "0600"
     content: |
-       : PSK "foobar"
+      : PSK "foobar"
 
   # IPSEC tunnel configuration
   - path: /etc/ipsec.conf
