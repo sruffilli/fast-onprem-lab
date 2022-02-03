@@ -13,15 +13,8 @@ packages:
   - strongswan
   - libstrongswan-standard-plugins
   - frr
-  - ufw
 
 runcmd:
-  - ufw allow from 10.0.0.0/8
-  - ufw allow from 172.16.0.0/12
-  - ufw allow from 192.168.0.0/16
-  - ufw allow ssh
-  - ufw default deny incoming
-  - ufw --force enable
   - sed -ie '/^PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
   - service ssh restart
   - rm /var/www/html/*
@@ -33,12 +26,12 @@ runcmd:
   - systemctl start coredns.service
 
 write_files:
-  # IPSEC tunnel secret
+  # IPSEC tunnel secret. Make sure to add a space before the first ":"
   - path: /etc/ipsec.secrets
     owner: root:root
     permissions: "0600"
     content: |
-      ${" "}: PSK "${peer1.shared_secret}"
+       : PSK "foobar"
 
   # IPSEC tunnel configuration
   - path: /etc/ipsec.conf
@@ -55,36 +48,26 @@ write_files:
         ike=aes256gcm16-sha512-modp2048
         esp=aes256gcm16-sha512-modp8192
         authby=psk
+        left=%any
+        leftid=%any
+        leftsubnet=0.0.0.0/0
+        leftauth=psk
+        rightauth=psk
+        rightsubnet=0.0.0.0/0
+        type=tunnel
+        auto=start
+        dpdaction=restart
+        closeaction=restart
+        mark=%unique
       conn gcp
-        leftupdown="/var/lib/strongswan/ipsec-vti.sh 0 ${peer1.peer_bgp_address}/30 ${peer1.local_bgp_address}/30"
-        left=%any
-        leftid=%any
-        leftsubnet=0.0.0.0/0
-        leftauth=psk
-        right=${peer1.peer_ip}
-        rightid=${peer1.peer_ip}
-        rightsubnet=0.0.0.0/0
-        rightauth=psk
-        type=tunnel
-        auto=start
-        dpdaction=restart
-        closeaction=restart
-        mark=%unique
+        leftupdown="/var/lib/strongswan/ipsec-vti.sh 0 169.254.1.2/30 169.254.1.1/30"
+        right=35.242.88.135
+        rightid=35.242.88.135
       conn gcp2
-        leftupdown="/var/lib/strongswan/ipsec-vti.sh 1 ${peer2.peer_bgp_address}/30 ${peer2.local_bgp_address}/30"
+        leftupdown="/var/lib/strongswan/ipsec-vti.sh 1 169.254.1.6/30 169.254.1.5/30"
         left=%any
-        leftid=%any
-        leftsubnet=0.0.0.0/0
-        leftauth=psk
-        right=${peer2.peer_ip}
-        rightid=${peer2.peer_ip}
-        rightsubnet=0.0.0.0/0
-        rightauth=psk
-        type=tunnel
-        auto=start
-        dpdaction=restart
-        closeaction=restart
-        mark=%unique
+        right=35.220.106.20
+        rightid=35.220.106.20
 
   # Charon configuration
   - path: /etc/strongswan.d/vti.conf
@@ -123,39 +106,39 @@ write_files:
 
       IP=$(which ip)
 
-      PLUTO_MARK_OUT_ARR=($${PLUTO_MARK_OUT//// })
-      PLUTO_MARK_IN_ARR=($${PLUTO_MARK_IN//// })
+      PLUTO_MARK_OUT_ARR=(${PLUTO_MARK_OUT//// })
+      PLUTO_MARK_IN_ARR=(${PLUTO_MARK_IN//// })
 
-      VTI_TUNNEL_ID=$${1}
-      VTI_REMOTE=$${2}
-      VTI_LOCAL=$${3}
+      VTI_TUNNEL_ID=${1}
+      VTI_REMOTE=${2}
+      VTI_LOCAL=${3}
 
-      LOCAL_IF="$${PLUTO_INTERFACE}"
-      VTI_IF="vti$${VTI_TUNNEL_ID}"
+      LOCAL_IF="${PLUTO_INTERFACE}"
+      VTI_IF="vti${VTI_TUNNEL_ID}"
       # GCP's MTU is 1460
       GCP_MTU="1460"
       # ipsec overhead is 73 bytes, we need to compute new mtu.
       VTI_MTU=$((GCP_MTU-73))
 
-      case "$${PLUTO_VERB}" in
+      case "${PLUTO_VERB}" in
           up-client)
-              sudo $${IP} link add $${VTI_IF} type vti local $${PLUTO_ME} remote $${PLUTO_PEER} okey $${PLUTO_MARK_OUT_ARR[0]} ikey $${PLUTO_MARK_IN_ARR[0]}
-              sudo $${IP} addr add $${VTI_LOCAL} remote $${VTI_REMOTE} dev "$${VTI_IF}"
-              sudo $${IP} link set $${VTI_IF} up mtu $${VTI_MTU}
+              sudo ${IP} link add ${VTI_IF} type vti local ${PLUTO_ME} remote ${PLUTO_PEER} okey ${PLUTO_MARK_OUT_ARR[0]} ikey ${PLUTO_MARK_IN_ARR[0]}
+              sudo ${IP} addr add ${VTI_LOCAL} remote ${VTI_REMOTE} dev "${VTI_IF}"
+              sudo ${IP} link set ${VTI_IF} up mtu ${VTI_MTU}
 
               # Disable IPSEC Policy
-              sudo /sbin/sysctl -w net.ipv4.conf.$${VTI_IF}.disable_policy=1
+              sudo /sbin/sysctl -w net.ipv4.conf.${VTI_IF}.disable_policy=1
 
               # Enable loosy source validation, if possible. Otherwise disable validation.
-              sudo /sbin/sysctl -w net.ipv4.conf.$${VTI_IF}.rp_filter=2 || sysctl -w net.ipv4.conf.$${VTI_IF}.rp_filter=0
+              sudo /sbin/sysctl -w net.ipv4.conf.${VTI_IF}.rp_filter=2 || sysctl -w net.ipv4.conf.${VTI_IF}.rp_filter=0
 
               # If you would like to use VTI for policy-based you shoud take care of routing by yourselv, e.x.
-              if [[ "$${PLUTO_PEER_CLIENT}" != "0.0.0.0/0" ]]; then
-                  $${IP} r add "$${PLUTO_PEER_CLIENT}" dev "$${VTI_IF}"
+              if [[ "${PLUTO_PEER_CLIENT}" != "0.0.0.0/0" ]]; then
+                  ${IP} r add "${PLUTO_PEER_CLIENT}" dev "${VTI_IF}"
               fi
               ;;
           down-client)
-              sudo $${IP} tunnel del "$${VTI_IF}"
+              sudo ${IP} tunnel del "${VTI_IF}"
               ;;
       esac
 
@@ -163,8 +146,8 @@ write_files:
       sudo /sbin/sysctl -w net.ipv4.ip_forward=1
 
       # Disable IPSEC Encryption on local net
-      sudo /sbin/sysctl -w net.ipv4.conf.$${LOCAL_IF}.disable_xfrm=1
-      sudo /sbin/sysctl -w net.ipv4.conf.$${LOCAL_IF}.disable_policy=1
+      sudo /sbin/sysctl -w net.ipv4.conf.${LOCAL_IF}.disable_xfrm=1
+      sudo /sbin/sysctl -w net.ipv4.conf.${LOCAL_IF}.disable_policy=1
 
   # FRR config
   - path: /etc/frr/frr.conf
@@ -177,16 +160,16 @@ write_files:
       no ipv6 forwarding
       service integrated-vtysh-config
       !
-      router bgp ${local_asn}
-      neighbor ${peer1.peer_bgp_address} remote-as ${remote_asn}
-      neighbor ${peer2.peer_bgp_address} remote-as ${remote_asn}
+      router bgp 65534
+      neighbor 169.254.1.2 remote-as 64512
+      neighbor 169.254.1.6 remote-as 64512
       !
       address-family ipv4 unicast
         redistribute connected
-        neighbor ${peer1.peer_bgp_address} route-map gcp in
-        neighbor ${peer1.peer_bgp_address} route-map gcp out
-        neighbor ${peer2.peer_bgp_address} route-map gcp in
-        neighbor ${peer2.peer_bgp_address} route-map gcp out
+        neighbor 169.254.1.2 route-map gcp in
+        neighbor 169.254.1.2 route-map gcp out
+        neighbor 169.254.1.6 route-map gcp in
+        neighbor 169.254.1.6 route-map gcp out
       exit-address-family
       !
       route-map gcp permit 10

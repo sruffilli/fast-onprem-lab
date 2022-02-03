@@ -1,12 +1,20 @@
 # Setting up a simulated on-prem environment for GCP
 
-This guide walks you through how to configure
-[strongSwan](https://www.strongswan.org/), [frr](https://frrouting.org/) and
-[CoreDNS](https://coredns.io/) to simulate an on premises environment, to be integrated with a Google Cloud environment leveraging
-[Google Cloud VPN HA](https://cloud.google.com/network-connectivity/docs/vpn) and [Google Cloud DNS](https://cloud.google.com/dns/docs/overview/). This
-information is provided as an example only and is not meant to be a
-comprehensive overview of IPsec, BGP and DNS. Basic knowledge of the involved
-protocols is required.
+This guide is meant to setup a basic simulated on-prem environment, which configures IPSec ([strongSwan](https://www.strongswan.org/)), BGP
+([frr](https://frrouting.org/)) and DNS ([CoreDNS](https://coredns.io/)).
+
+On the GCP side, an highly available VPN, routing and DNS setup will is
+configured leveraging
+[Google Cloud VPN HA](https://cloud.google.com/network-connectivity/docs/vpn)
+and [Google Cloud DNS](https://cloud.google.com/dns/docs/overview/). 
+
+A step-by-step procedure is provided outlining all the commands and configurations required to spin-up the required infrastructure on GCP and to
+configure your "on-prem" laboratory.
+
+While this setup is fully tested at the time of writing and should work
+off-the-shelf, basic familiarity with the `gcloud` CLI, Linux administration
+and network protocols is recommended and will be useful in case something
+goes south.
 
 ## Topology
 
@@ -26,25 +34,34 @@ The following values are also assumed for your GCP environment:
 |Cloud Private DNS Zone|`gcp.example.com`|On premises Private DNS Zone|
 |Cloud VPN Gateway INTERFACE0 |`35.242.88.135`|IP for the VPN Gateway INTERFACE0, generated when creating the VPN Gateway|
 |Cloud VPN Gateway INTERFACE1 |`35.220.106.20`|IP for the VPN Gateway INTERFACE1, generated when creating the VPN Gateway|
-|Project id|`vpn-lab-foobar`|Project ID for the existing GCP project where the environment will be set up|
+|Project id|`vpn-lab-foobar-0`|Project ID for the existing GCP project where the environment will be set up. Create your own as I've already used this :)|
 |Region|`europe-west1`|Deployment region for the GCP environment|
 |VPC CIDR|`10.0.1.0/24`|GCP network CIDR|
 |VPC|`vpc`|Name for the GCP VPC|
 
 ## On premises environment
 
-Although the configurations and steps described in the following sections should apply to a wide range of Linux distributions, this guide assumes the following setup:
+Google Cloud VPN HA gateways cannot terminate connections to Google Cloud IP
+endpoints (since Google Clouds manages this scenario with an [ad-hoc, optimized
+setup](https://cloud.google.com/network-connectivity/docs/vpn/how-to/creating-ha-vpn2)).
+Because of this, your on-prem environment **must** be hosted outside of GCP -
+anything that can run Debian and satisfies the networking requirement will work,
+from that raspberry pi you forgot in a drawer, to a cheap VPS instance.
+
+The configurations and steps described in the following sections should apply
+to a wide range of Linux distributions - we however assume the following
+environment:
 
 * Clean Debian 11 installation
-* Two network interfaces (eth0 external, eth1 internal)
+* Two network interfaces (eth0 external, eth1 internal) #TODO: use a loopback if
 * Root access to the machine
-* Your on-premises firewall allows
+* Full line-of-sight (i.e. firewall allows to your server) for:
   * UDP 53
   * UDP 500
   * UDP 4500
-  * ESP proto
+  * ESP protocol
 
-The following values are also assumed for your on premises environment:
+The following values are also assumed for your lab:
 
 |Name|Value|Description|
 |-|-|-|
@@ -55,24 +72,26 @@ The following values are also assumed for your on premises environment:
 
 ## GCP VPN HA
 
-Run the following commands to create the GCP environments
+The following commands create a complete GCP testing environment. Adapt them 
+accordingly to your desired parameters.
 
 ```bash
 
-# Use the existing vpn-lab-foobar project for all following commands
+# Use the existing vpn-lab-foobar-0 project for all following commands
 gcloud config set project vpn-lab-foobar-0
 
 # Create a VPC named "vpc"
 # Enable `compute.googleapis.com` if prompted to do so.
 gcloud compute networks create vpc --bgp-routing-mode=global \
---subnet-mode=custom
+  --subnet-mode=custom
 
-# Create a firewall rule enabling ICMP and SSH for the VPC
-gcloud compute firewall-rules create allow-icmp-ssh --network vpc --allow tcp:22,icmp
+# Create a firewall rule enabling ICMP and SSH ingress
+gcloud compute firewall-rules create allow-icmp-ssh --network vpc \
+  --allow tcp:22,icmp
 
 # Create a subnet 
 gcloud compute networks subnets create ew1-subnet --network=vpc \
---range=10.0.1.0/24 --region=europe-west1
+  --range=10.0.1.0/24 --region=europe-west1
 
 # Create the VPN gateway which will terminate the ipsec tunnels
 gcloud compute vpn-gateways create gcp-to-onprem \
@@ -145,6 +164,7 @@ gcloud compute routers add-bgp-peer vpn-router \
   --region=europe-west1
 
 # Create a private zone for the GCP environment
+# Enable `dns.googleapis.com` if prompted to do so.
 gcloud dns managed-zones create gcp-example-com \
     --dns-name=gcp.example.com. \
     --networks=vpc \
@@ -175,12 +195,24 @@ gcloud compute instances create instance-1 --zone=europe-west1-b --machine-type=
 
 ## Configuration of the on-premises environment
 
-The commands that follow install the required packages and binary files, create
+The following commands install the required packages and binary files, create
 the required configuration files and start StrongSwan, FRR, CoreDNS and Nginx.
+Make sure to adapt them according to your existing environment.
+
+The same commands [are also available](./lab.yaml) as a
+[cloud-init](https://cloud-init.io/) script which can be used to provision a
+pre-configured VM.
 
 ```bash
 apt update
 apt install nginx strongswan libstrongswan-standard-plugins frr -y
+
+ufw allow from 10.0.0.0/8
+ufw allow from 172.16.0.0/12
+ufw allow from 192.168.0.0/16
+ufw allow ssh
+ufw default deny incoming
+ufw --force enable
 
 rm /var/www/html/* && echo "Greetings from $(curl -s ifconfig.me)!" >>/var/www/html/index.html
 curl -s -L https://github.com/coredns/coredns/releases/download/v1.8.7/coredns_1.8.7_linux_amd64.tgz | tar xz -C /usr/bin
@@ -327,10 +359,6 @@ exit-address-family
 !
 route-map gcp permit 10
 !
-route-map import permit 1
-!
-route-map export permit 1
-!
 line vty
 !
 EOF
@@ -410,3 +438,5 @@ service coredns restart
 service strongswan-starter restart
 service frr restart
 ```
+
+You should be all set!
