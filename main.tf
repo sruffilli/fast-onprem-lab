@@ -14,11 +14,24 @@
  * limitations under the License.
  */
 
+locals {
+  vpn_config = yamldecode(file("class.yaml"))
+}
+
+output "locals" {
+  value = {
+    vpn_config = local.vpn_config
+  }
+}
+
 module "hetzner" {
   source              = "./modules/hetzner-lab"
   cloud_init_template = "./cloud-init/vpngw.yaml"
   hetzner_token       = var.hetzner_token
   ssh_key             = var.ssh_key
-  vpn_config          = var.vpn_config
-  net_cidr            = var.onprem_cidr
+  vpn_config          = local.vpn_config
+}
+
+output "ips" {
+  value = module.hetzner.ips
 }

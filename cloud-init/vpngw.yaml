@@ -14,14 +14,19 @@ packages:
   - libstrongswan-standard-plugins
   - frr
   - ufw
+  - iproute2
+  - dnsutils
+  - tcpdump
 
 runcmd:
   - ufw allow from 10.0.0.0/8
   - ufw allow from 172.16.0.0/12
   - ufw allow from 192.168.0.0/16
+  - ufw allow from 35.199.192.0/19
   - ufw allow ssh
   - ufw default deny incoming
   - ufw --force enable
+  - ip addr add 10.0.200.3/24 dev lo
   - sed -ie '/^PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
   - service ssh restart
   - rm /var/www/html/*
@@ -263,4 +268,4 @@ write_files:
     owner: root:root
     permissions: "0640"
     content: |
-      127.0.0.10 ten
+      127.0.0.42 treasure.onprem.example.com

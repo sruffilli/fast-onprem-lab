@@ -1,0 +1,31 @@
+---
+- name: sruffilli
+  remote_asn: 64512
+  local_asn: 65534
+  peer1:
+    local_bgp_address: 169.254.1.1
+    peer_ip: 35.242.87.243
+    peer_bgp_address: 169.254.1.2
+    remote_ip_cidr_ranges: 10.128.0.0/16
+    shared_secret: foobar
+  peer2:
+    local_bgp_address: 169.254.1.5
+    peer_ip: 35.220.111.149
+    peer_bgp_address: 169.254.1.6
+    remote_ip_cidr_ranges: 10.128.0.0/16
+    shared_secret: foobar
+# - name: sruffilli2
+#   remote_asn: 64512
+#   local_asn: 65534
+#   peer1:
+#     local_bgp_address: 169.254.1.1
+#     peer_ip: 35.242.87.243
+#     peer_bgp_address: 169.254.1.2
+#     remote_ip_cidr_ranges: 10.128.0.0/16
+#     shared_secret: foobar
+#   peer2:
+#     local_bgp_address: 169.254.1.5
+#     peer_ip: 35.220.111.149
+#     peer_bgp_address: 169.254.1.6
+#     remote_ip_cidr_ranges: 10.128.0.0/16
+#     shared_secret: foobar

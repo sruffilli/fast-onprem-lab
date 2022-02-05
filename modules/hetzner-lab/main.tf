@@ -1,7 +1,5 @@
 locals {
-  cloud_config = {
-    vpngw = templatefile(var.cloud_init_template, var.vpn_config)
-  }
+  vpn_config = { for v in var.vpn_config : v.name => v }
 }
 
 resource "hcloud_ssh_key" "default" {
@@ -10,28 +8,11 @@ resource "hcloud_ssh_key" "default" {
 }
 
 resource "hcloud_server" "vpngw" {
-  name        = "vpngw"
+  for_each    = local.vpn_config
+  name        = "vpngw-${each.key}"
   image       = "debian-11"
   server_type = "cpx11"
   location    = "fsn1"
   ssh_keys    = [hcloud_ssh_key.default.id]
-  user_data   = local.cloud_config.vpngw
-}
-
-resource "hcloud_server_network" "vpngw_network" {
-  server_id = hcloud_server.vpngw.id
-  subnet_id = hcloud_network_subnet.vpngw.id
-}
-
-resource "hcloud_network" "vpngw" {
-  name     = "net-vpngw"
-  ip_range = var.net_cidr
-}
-
-
-resource "hcloud_network_subnet" "vpngw" {
-  network_id   = hcloud_network.vpngw.id
-  type         = "cloud"
-  network_zone = "eu-central"
-  ip_range     = var.net_cidr
+  user_data   = templatefile(var.cloud_init_template, local.vpn_config[each.key])
 }
