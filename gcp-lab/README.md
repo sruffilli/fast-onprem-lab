@@ -6,7 +6,7 @@ This guide is meant to setup a basic simulated on-prem environment, which config
 On the GCP side, an highly available VPN, routing and DNS setup will is
 configured leveraging
 [Google Cloud VPN HA](https://cloud.google.com/network-connectivity/docs/vpn)
-and [Google Cloud DNS](https://cloud.google.com/dns/docs/overview/). 
+and [Google Cloud DNS](https://cloud.google.com/dns/docs/overview/).
 
 A step-by-step procedure is provided outlining all the commands and configurations required to spin-up the required infrastructure on GCP and to
 configure your "on-prem" laboratory.
@@ -53,7 +53,7 @@ to a wide range of Linux distributions - we however assume the following
 environment:
 
 * Clean Debian 11 installation
-* Two network interfaces (eth0 external, eth1 internal) #TODO: use a loopback if
+* A publicly exposed NIC
 * Root access to the machine
 * Full line-of-sight (i.e. firewall allows to your server) for:
   * UDP 53
@@ -66,13 +66,13 @@ The following values are also assumed for your lab:
 |Name|Value|Description|
 |-|-|-|
 |External IP|`198.51.100.1`|External IP address|
-|Internal IP|`10.0.0.2/24`|Internal IP address|
+|Internal IP|`10.0.0.2/24`|Internal IP address, which will be configured on a loopback interface|
 |On premises CIDR|`10.0.0.0/24`|Onprem network CIDR|
 |On premises Private DNS Zone|`onprem.example.com`|On premises Private DNS Zone|
 
 ## GCP VPN HA
 
-The following commands create a complete GCP testing environment. Adapt them 
+The following commands create a complete GCP testing environment. Adapt them
 accordingly to your desired parameters.
 
 ```bash
@@ -205,11 +205,16 @@ pre-configured VM.
 
 ```bash
 apt update
-apt install nginx strongswan libstrongswan-standard-plugins frr -y
+apt install nginx strongswan libstrongswan-standard-plugins frr iproute2 -y
+
+ip addr add 10.0.0.2/24 dev lo
 
 ufw allow from 10.0.0.0/8
+ufw allow from 169.254.0.0/16
 ufw allow from 172.16.0.0/12
 ufw allow from 192.168.0.0/16
+ufw allow from 35.199.192.0/19
+ufw allow 500/udp
 ufw allow ssh
 ufw default deny incoming
 ufw --force enable
@@ -440,3 +445,6 @@ service frr restart
 ```
 
 You should be all set!
+Verify that your VPN setup works by checking "VPN tunnel status" and "BGP
+session status" on the Google Cloud Console under **Hybrid Connectivity > VPN**.
+You should also be able to ping from/to on-prem and to resolve DNS records.
